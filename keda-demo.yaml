@@ -1,0 +1,108 @@
+# keda-demo.yaml
+
+# --- The Redis Queue Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  namespace: keda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis-container
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+---
+# --- The Redis Service ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: keda
+spec:
+  selector:
+    app: redis
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+---
+# --- The Emulator Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: android-emulator-deployment
+  namespace: keda
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: android-emulator
+  template:
+    metadata:
+      labels:
+        app: android-emulator
+    spec:
+      containers:
+      - name: emulator-container
+        image: android-farm:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: WEB_VNC 
+          value: "true"
+        - name: APPIUM
+          value: "false"
+        - name: EMULATOR_DEVICE
+          value: "Samsung Galaxy S10" # Skin of emulator
+        resources:
+          requests:
+            memory: "[x]Gi" # Guarantees x Gibibytes of RAM
+            cpu: "[y]m"   # Guarantees [y]/1000 full CPU core ([y] millicores)
+          limits:
+            memory: "[x]Gi" # Caps RAM usage at [x] Gibibytes
+            cpu: "[y]m"   # Caps CPU usage at [y]/1000 full CPU cores
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: kvm
+          mountPath: /dev/kvm
+      volumes:
+      - name: kvm
+        hostPath:
+          path: /dev/kvm
+---
+# --- The Scaled Object ---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: redis-queue-scaler
+  namespace: keda
+spec:
+  scaleTargetRef:
+    name: android-emulator-deployment
+  minReplicaCount: 0
+  maxReplicaCount: 3 # Current max emulators during testing
+  cooldownPeriod: 60
+  triggers:
+  - type: redis
+    metadata:
+      address: redis-service.keda.svc.cluster.local:6379
+      listName: test_queue
+      listLength: "1"

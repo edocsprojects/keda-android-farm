@@ -1,0 +1,4 @@
+redis
+requests
+Appium-Python-Client
+selenium
