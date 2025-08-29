@@ -9,8 +9,8 @@ ENV EMULATOR_ARGS="-no-snapshot-load -no-boot-anim -no-audio -no-window -accel o
 # 3. Switch user for installation of tools
 USER root
 
-# 4. Add redis and lsof
-RUN apt-get update && apt-get install -y redis-tools lsof
+# 4. Add redis, lsof, and curl
+RUN apt-get update && apt-get install -y redis-tools lsof curl
 
 # 5. Switch user to default
 USER androidusr

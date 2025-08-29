@@ -42,6 +42,14 @@ Adjust the configs of CPU and RAM usage inside keda-farm.yaml
     Once the setup is complete, you will see instructions for how to interact with the farm.
 
 ---
+
+## Issues
+
+Due to limit ram during testing, these cases haven't been tested in depth:
+    1. Pods correctly closing with high start up count
+    2. Active jobs trigger within the keda-farm.yaml
+    3. Clouds scalability
+
 ## Usage
 
 With the farm running, you can open new terminal windows to perform the following actions.

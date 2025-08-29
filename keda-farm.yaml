@@ -73,11 +73,9 @@ spec:
           value: "Samsung Galaxy S10"
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "1000m"
+            memory: "8Gi"
           limits:
-            memory: "4Gi"
-            cpu: "2000m" 
+            memory: "12Gi"
         securityContext:
           privileged: true
         volumeMounts:
@@ -106,3 +104,11 @@ spec:
       address: redis-service.keda.svc.cluster.local:6379
       listName: test_queue
       listLength: "1"
+      metricName: "pending-jobs-length"
+  - type: redis
+    metadata:
+      address: redis-service.keda.svc.cluster.local:6379
+      hashName: active_jobs
+      hashLength: "1"
+      listName: "dummy-name"
+      metricName: "active-jobs-length"

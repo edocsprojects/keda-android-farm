@@ -5,17 +5,32 @@ import sys
 
 # --- Functions ---
 def get_emulator_pods():
-    """Returns a list of running android-emulator pods in the keda namespace."""
+    """Returns a list of running android-emulator pods, sorted by creation time."""
+    # This command now gets the creation timestamp and name for each pod.
     command = [
         "kubectl", "get", "pods",
         "-n", "keda",
         "-l", "app=android-emulator",
-        "-o", "jsonpath={.items[*].metadata.name}"
+        "-o", "jsonpath={range .items[*]}{.metadata.creationTimestamp}{'\\t'}{.metadata.name}{'\\n'}{end}"
     ]
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True)
-        pods = result.stdout.strip().split()
-        return pods
+        
+        # Create a list of (timestamp, pod_name) tuples
+        pod_data = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                timestamp, name = line.split('\t')
+                pod_data.append((timestamp, name))
+
+        # Sort the list of pods based on the timestamp (which is the first item in each tuple)
+        # ISO 8601 timestamps can be sorted alphabetically.
+        pod_data.sort(key=lambda item: item[0])
+        
+        # Extract just the names from the now-sorted list
+        sorted_pods = [name for timestamp, name in pod_data]
+        
+        return sorted_pods
     except subprocess.CalledProcessError:
         print("Error: Could not list pods. Is kubectl connected to the right cluster?")
         return []
@@ -31,6 +46,9 @@ def main():
     if not running_pods:
         print("> 1: Finding running emulator pods: Failed. No pods found.")
         sys.exit(0)
+    
+    # The list is now pre-sorted by creation time, so the alphabetical sort is no longer needed.
+
     print(f"> 1: Finding running emulator pods: Success. Found {len(running_pods)} pod(s).")
 
     print("\nPlease select a pod to watch:")

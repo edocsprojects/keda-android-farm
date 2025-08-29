@@ -25,6 +25,14 @@ echo "[INFO] Starting Appium server..."
 lsof -t -i :4723 | xargs -r kill -9
 appium --allow-insecure chromedriver_autodownload >> /tmp/appium.log 2>&1 &
 
+# Wait for Appium to be ready before accepting jobs.
+echo "[INFO] Waiting for Appium server to be ready..."
+until curl --output /dev/null --silent --head --fail http://localhost:4723/status; do
+    echo "[INFO] Appium not up yet, sleeping..."
+    sleep 2
+done
+echo "[INFO] Appium server is ready."
+
 # 5. Wait for and retrieve a job from the Redis queue.
 echo "[INFO] Waiting for a job from Redis on 'test_queue'..."
 JOB_ID=$(redis-cli -h redis-service.keda.svc.cluster.local BRPOP test_queue 0 | tail -n 1)

@@ -31,29 +31,27 @@ def get_pod_name_from_ip(pod_ip):
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
-def main():
+def main(url):
     """Connects to Redis, submits a test job, and runs an Appium test against the resulting emulator."""
+    r = None
+    job_id = None
+    port_forward_process = None
+    driver = None
+    
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()
         print(f"> Connected to Redis at {REDIS_HOST}: Success.")
-    except redis.exceptions.ConnectionError:
-        print(f"Error: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}.")
-        sys.exit(1)
 
-    job_id = str(uuid.uuid4())[:8]
-    pod_name = None
-    port_forward_process = None
-    driver = None
-
-    try:
-        print(f"\n> 1: Submitting job {job_id} to queue '{JOB_QUEUE}'...")
+        job_id = str(uuid.uuid4())[:8]
+        
+        # --- Main Test Logic ---
         r.lpush(JOB_QUEUE, job_id)
-        print(f"> 1: Submitting job: Success.")
+        print(f"> 1: Submitting job {job_id} to queue '{JOB_QUEUE}': Success.")
 
         print("\n> 2: Waiting for emulator pod...")
         emulator_ip = None
-        for _ in range(136):
+        for _ in range(300): # 5 minute timeout
             emulator_ip = r.hget(ACTIVE_JOBS_HASH, job_id)
             if emulator_ip:
                 break
@@ -68,25 +66,28 @@ def main():
         print(f"> 2: Waiting for emulator pod: Success. Found {pod_name} at {emulator_ip}")
 
         print("\n> 3: Establishing connection to pod...")
-        local_appium_port = 4723
+        port_offset = int(job_id[-4:], 16) % 1000 
+        local_appium_port = 4724 + port_offset
+        
+        print(f"> Using unique local port {local_appium_port} for this test.")
         port_forward_command = ["kubectl", "port-forward", "-n", "keda", pod_name, f"{local_appium_port}:4723"]
         port_forward_process = subprocess.Popen(port_forward_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        time.sleep(15)
+        time.sleep(3)
         
         appium_ready = False
-        for i in range(10):
+        for i in range(20):
             try:
                 r_status = requests.get(f'http://localhost:{local_appium_port}/status')
                 if r_status.status_code == 200:
                     appium_ready = True
                     break
             except requests.exceptions.ConnectionError:
-                print(f"Appium not ready yet, retrying ({i+1}/10)...")
-            time.sleep(2)
+                print(f"Appium not ready yet, retrying ({i+1}/20)...")
+            time.sleep(3)
 
         if not appium_ready:
-            raise Exception("Appium server not responding after 10 retries.")
+            raise Exception("Appium server not responding after retries.")
         print("> 3: Establishing connection to pod: Success.")
 
         print("\n> 4: Running Appium test...")
@@ -94,10 +95,10 @@ def main():
         options.platform_name = 'Android'
         options.automation_name = 'UiAutomator2'
         options.browser_name = 'Chrome'
-        options.new_command_timeout = 300
+        options.new_command_timeout = 100
         options.set_capability("appium:chromeOptions", {"w3c": True})
         options.set_capability("appium:allowInsecure", "chromedriver_autodownload")
-
+        
         driver = webdriver.Remote(f'http://localhost:{local_appium_port}', options=options)
         
         time.sleep(5)
@@ -121,14 +122,15 @@ def main():
         if not found_webview:
             raise Exception("Timed out waiting for webview context.")
 
-        driver.get("https://www.google.com")
+        driver.get(f"{url}")
         time.sleep(3)
         print(f"> 4: Running Appium test: Success. Page title: {driver.title}")
         print("\n*** TEST SUCCEEDED! ***")
 
     except Exception as e:
-        print(f"\nAn error occurred: {e}")
-        input("The pod has been left running for debugging. Press Enter to clean up...")
+        print(f"\n*** TEST FAILED! ***")
+        print(f"An error occurred: {e}")
+        
     finally:
         print("\nCleaning up resources...")
         if driver:
@@ -137,13 +139,12 @@ def main():
             port_forward_process.terminate()
         
         if r and job_id:
+            print(f"Signaling KEDA to scale down pod for job {job_id}...")
             r.hdel(ACTIVE_JOBS_HASH, job_id)
-            r.lrem(JOB_QUEUE, 0, job_id)
 
-        if pod_name:
-            subprocess.run(["kubectl", "delete", "pod", "-n", "keda", pod_name], stdout=subprocess.DEVNULL)
         print("Cleanup complete.")
 
 # --- Main ---
 if __name__ == "__main__":
-    main()
+    url = input("Enter url address: ")
+    main(url=url)
