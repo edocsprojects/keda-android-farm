@@ -26,7 +26,7 @@ Adjust the configs of CPU and RAM usage inside keda-farm.yaml
 1.  **Clone the Repository**
     ```bash
     git clone https://github.com/edocsprojects/keda-android-farm
-    cd <your-repo-directory>
+    cd keda-android-farm
     ```
 
 2.  **Install Python Dependencies**
